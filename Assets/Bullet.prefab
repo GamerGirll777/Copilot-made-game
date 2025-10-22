@@ -100,7 +100,7 @@ BoxCollider2D:
   m_Enabled: 1
   serializedVersion: 3
   m_Density: 1
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 6200000, guid: 07b600d778063bc4aaac0941a0274197, type: 2}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -176,6 +176,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   isPlayer: 0
+  isBullet: 0
+  moveRightKey: 100
+  moveRightAllowController: 1
+  moveRightController: 1
+  moveLeftKey: 97
+  moveLeftAllowController: 1
+  moveLeftController: 1
+  jumpKey: 32
+  jumpAllowController: 1
+  jumpController: 3
+  shootKey: 306
+  shootAllowController: 1
+  shootController: 2
   moveSpeed: 6
   jumpForce: 12
   fallMultiplier: 2.5
@@ -193,4 +206,14 @@ MonoBehaviour:
   bulletLifetime: 5
   shootCooldown: 5
   gunShowDuration: 0.12
+  bulletFallGravity: 1
+  bulletFallLifetime: 2
+  objectRecoilForce: 6
+  objectGravityScaleOnHit: 1
+  objectStillVelocityThreshold: 0.05
+  objectStillTimeToDestroy: 0.6
+  objectAdditionalDelayAfterStill: 0.1
+  bulletEnableRecoilOnLastHit: 0
+  bulletRecoilForce: 4
+  bulletRecoilUpwardBias: 0.6
   bulletColor: {r: 0.5, g: 0.5, b: 0.5, a: 1}

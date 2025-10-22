@@ -128,6 +128,8 @@ public class PlayerMovmentAndShooting : MonoBehaviour
     public bool bulletEnableRecoilOnLastHit = false;
     [Tooltip("Recoil force (impulse) applied to the bullet opposite its incoming direction when it hits its last allowed object.")]
     public float bulletRecoilForce = 4f;
+    [Tooltip("Upward bias added to the recoil direction (0 = purely opposite, 1 = equal up component).")]
+    public float bulletRecoilUpwardBias = 0.6f;
 
     // -----------------------
     // Bullet appearance
@@ -483,14 +485,17 @@ public class PlayerMovmentAndShooting : MonoBehaviour
         if (incomingVel.sqrMagnitude > 0.0001f) incomingDir = incomingVel.normalized;
         else incomingDir = new Vector2(Mathf.Sign(transform.localScale.x), 0f);
 
-        Vector2 recoil = -incomingDir * bulletRecoilForce;
+        // Base recoil direction is opposite the incoming direction.
+        Vector2 baseDir = -incomingDir;
 
-        // Give an immediate backward velocity for a reliable felt "fling".
-        // Preserve vertical velocity to avoid snapping:
-        bulletRb.linearVelocity = new Vector2(recoil.x, bulletRb.linearVelocity.y);
+        // Add upward bias so bullet is flung backwards+upwards.
+        Vector2 recoilDir = (baseDir + Vector2.up * bulletRecoilUpwardBias).normalized;
 
-        // Make sure body behaves dynamically so recoil takes effect
+        // Ensure the bullet behaves as a dynamic physics body so the fling is visible.
         bulletRb.bodyType = RigidbodyType2D.Dynamic;
+
+        // Set immediate velocity so the bullet is flung; magnitude controlled by bulletRecoilForce.
+        bulletRb.linearVelocity = recoilDir * bulletRecoilForce;
     }
 
     void MakeThisBulletFallAndDisappear()
@@ -611,6 +616,7 @@ internal class PlayerMovmentAndShootingEditor : Editor
 
     SerializedProperty bulletEnableRecoilOnLastHit;
     SerializedProperty bulletRecoilForce;
+    SerializedProperty bulletRecoilUpwardBias;
 
     SerializedProperty iteratorProp;
 
@@ -637,6 +643,7 @@ internal class PlayerMovmentAndShootingEditor : Editor
 
         bulletEnableRecoilOnLastHit = serializedObject.FindProperty("bulletEnableRecoilOnLastHit");
         bulletRecoilForce = serializedObject.FindProperty("bulletRecoilForce");
+        bulletRecoilUpwardBias = serializedObject.FindProperty("bulletRecoilUpwardBias");
 
         iteratorProp = serializedObject.GetIterator();
     }
@@ -700,7 +707,10 @@ internal class PlayerMovmentAndShootingEditor : Editor
             EditorGUILayout.LabelField("Bullet - recoil (bullet-only)", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(bulletEnableRecoilOnLastHit, new GUIContent("Enable Recoil On Last Hit"));
             if (bulletEnableRecoilOnLastHit.boolValue)
+            {
                 EditorGUILayout.PropertyField(bulletRecoilForce, new GUIContent("Bullet Recoil Force"));
+                EditorGUILayout.PropertyField(bulletRecoilUpwardBias, new GUIContent("Bullet Recoil Upward Bias"));
+            }
             EditorGUILayout.Space();
         }
 
@@ -729,7 +739,8 @@ internal class PlayerMovmentAndShootingEditor : Editor
                 iteratorProp.name == shootAllowController.name ||
                 iteratorProp.name == shootController.name ||
                 iteratorProp.name == bulletEnableRecoilOnLastHit.name ||
-                iteratorProp.name == bulletRecoilForce.name)
+                iteratorProp.name == bulletRecoilForce.name ||
+                iteratorProp.name == bulletRecoilUpwardBias.name)
             {
                 continue;
             }
