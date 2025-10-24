@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 #if UNITY_EDITOR
@@ -10,7 +11,7 @@ using UnityEditor;
 /// Use the inspector checkboxes "I am PLAYER" or "I am BULLET" to switch mode.
 /// When "I am PLAYER" is checked the player-related editable fields are shown.
 /// When "I am BULLET" is checked the bullet-related editable fields are shown (the other checkbox is auto-cleared).
-/// Both checkboxes may be unchecked (no mode) � in that state nothing mode-specific is exposed.
+/// Both checkboxes may be unchecked (no mode) — in that state nothing mode-specific is exposed.
 /// </summary>
 [RequireComponent(typeof(Rigidbody2D))]
 public class PlayerMovmentAndShooting : MonoBehaviour
@@ -132,6 +133,13 @@ public class PlayerMovmentAndShooting : MonoBehaviour
     public float bulletRecoilUpwardBias = 0.6f;
 
     // -----------------------
+    // Bullet - objects that should NOT be destroyed when hit (bullet-only)
+    // -----------------------
+    [Header("Bullet - do-not-destroy list (bullet-only)")]
+    [Tooltip("List of GameObjects that should NOT be destroyed when hit by this bullet. If hit, the bullet will convert to physics but the target will NOT be given physics nor destroyed.")]
+    public List<GameObject> doNotDestroyList = new List<GameObject>(50);
+
+    // -----------------------
     // Bullet appearance
     // -----------------------
     [Header("Bullet (internal when isBullet == true)")]
@@ -151,6 +159,7 @@ public class PlayerMovmentAndShooting : MonoBehaviour
     int hitCount = 0;
     float lifeTimer = 0f;
     GameObject owner; // who shot this bullet (to avoid self-destroy)
+    bool lastHitProcessed = false; // ensure only the first last-hit processes object-physics
 
     const float axisThreshold = 0.5f;
 
@@ -167,6 +176,7 @@ public class PlayerMovmentAndShooting : MonoBehaviour
             isPlayer = false;
             lifeTimer = 0f;
             hitCount = 0;
+            lastHitProcessed = false;
         }
         else
         {
@@ -370,6 +380,12 @@ public class PlayerMovmentAndShooting : MonoBehaviour
         // initialize bullet as bullet-mode
         bulletScript.InitializeAsBullet(bulletSpeed, bulletLifetime, bulletMaxHits, bulletColor, this.gameObject);
 
+        // copy the shooter's do-not-destroy list into the bullet instance so runtime hits use the same exclusions.
+        if (doNotDestroyList != null && doNotDestroyList.Count > 0)
+        {
+            bulletScript.doNotDestroyList = new List<GameObject>(doNotDestroyList);
+        }
+
         float dir = facingRight ? 1f : -1f;
         bullet.transform.localScale = new Vector3(Mathf.Abs(bullet.transform.localScale.x) * dir, bullet.transform.localScale.y, bullet.transform.localScale.z);
 
@@ -401,6 +417,7 @@ public class PlayerMovmentAndShooting : MonoBehaviour
 
         lifeTimer = 0f;
         hitCount = 0;
+        lastHitProcessed = false;
 
         if (rb == null) rb = GetComponent<Rigidbody2D>();
         if (rb != null) rb.gravityScale = 0f;
@@ -417,7 +434,24 @@ public class PlayerMovmentAndShooting : MonoBehaviour
         if (other.gameObject == this.gameObject) return;
 
         PlayerMovmentAndShooting otherScript = other.GetComponent<PlayerMovmentAndShooting>();
-        if (otherScript != null && otherScript.isBullet == true) return;
+        // ignore bullets and players entirely
+        if (otherScript != null)
+        {
+            if (otherScript.isBullet) return;
+            if (otherScript.isPlayer) return; // bullets should not affect the player
+        }
+
+        // determine the canonical target to check against exclusion list:
+        GameObject hitObject = other.gameObject;
+        GameObject hitRoot = other.transform.root != null ? other.transform.root.gameObject : hitObject;
+        // check exclusion against collider, its parents, attached rigidbody object and root
+        bool isExcluded = IsInDoNotDestroyList(hitObject)
+                          || IsInDoNotDestroyList(hitRoot)
+                          || (other.attachedRigidbody != null && IsInDoNotDestroyList(other.attachedRigidbody.gameObject));
+
+#if UNITY_EDITOR
+        Debug.Log($"Bullet '{name}' hit '{hitObject.name}' (root '{hitRoot.name}'). excluded={isExcluded}. hitCount={hitCount}. willBeLast={(bulletMaxHits > 0 && (hitCount + 1 >= bulletMaxHits))}");
+#endif
 
         bool willBeLastHit = (bulletMaxHits > 0) && (hitCount + 1 >= bulletMaxHits);
 
@@ -427,53 +461,159 @@ public class PlayerMovmentAndShooting : MonoBehaviour
 
         if (willBeLastHit)
         {
+            // Ensure only the first last-hit processes object-physics / destruction rules
+            if (lastHitProcessed)
+            {
+                // Once the bullet already processed its final-hit conversion, do NOT add physics to other objects.
+                if (!isExcluded)
+                    SafeDestroy(other.gameObject);
+                return;
+            }
+
+            // Mark this bullet as converted so no further objects receive physics
+            lastHitProcessed = true;
+
             var destructible = other.GetComponent<DestructibleOnBulletHit>();
             if (destructible != null)
             {
-                // apply bullet recoil if enabled on bullet instance
-                if (isBullet && bulletEnableRecoilOnLastHit && bulletRb != null)
+                if (isExcluded)
                 {
-                    ApplyBulletRecoil(bulletRb, incomingVel);
-                }
+                    // EXCLUDED: do NOT affect the target at all. Only convert bullet to physics and optionally apply recoil to bullet.
+                    if (isBullet && bulletEnableRecoilOnLastHit && bulletRb != null)
+                        ApplyBulletRecoil(bulletRb, incomingVel);
 
-                destructible.OnHitByBullet(this.gameObject, incomingVel);
-                destructible.MakeBulletFallAndDisappear(this.gameObject);
+                    // Convert bullet to falling physics (bullet only). Do NOT call destructible.OnHitByBullet.
+                    MakeThisBulletFallAndDisappear();
+
+#if UNITY_EDITOR
+                    Debug.Log($"Excluded target '{hitObject.name}' — bullet converted but target untouched.");
+#endif
+                    // Do NOT increment hitCount — excluded hits do not consume player max-hits.
+                    return;
+                }
+                else
+                {
+                    // NORMAL: affect the target via its DestructibleOnBulletHit logic, and convert bullet to falling physics.
+                    if (isBullet && bulletEnableRecoilOnLastHit && bulletRb != null)
+                        ApplyBulletRecoil(bulletRb, incomingVel);
+
+                    destructible.OnHitByBullet(this.gameObject, incomingVel);
+                    destructible.MakeBulletFallAndDisappear(this.gameObject);
+
+                    hitCount++;
+                    return;
+                }
             }
             else
             {
-                Rigidbody2D otherRb = other.GetComponent<Rigidbody2D>();
-                if (otherRb == null)
+                // other does not have DestructibleOnBulletHit
+                if (isExcluded)
                 {
-                    otherRb = other.gameObject.AddComponent<Rigidbody2D>();
-                    otherRb.gravityScale = objectGravityScaleOnHit;
-                    otherRb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
-                    otherRb.freezeRotation = false;
+                    // EXCLUDED: do NOT add Rigidbody2D to other and do NOT destroy it.
+                    if (isBullet && bulletEnableRecoilOnLastHit && bulletRb != null)
+                        ApplyBulletRecoil(bulletRb, incomingVel);
+
+                    // Convert bullet to falling physics (bullet only).
+                    MakeThisBulletFallAndDisappear();
+
+#if UNITY_EDITOR
+                    Debug.Log($"Excluded non-destructible '{hitObject.name}' — bullet converted but target untouched.");
+#endif
+                    // Do NOT increment hitCount — excluded hits do not consume player max-hits.
+                    return;
                 }
-
-                Vector2 dir;
-                if (incomingVel.sqrMagnitude > 0.0001f) dir = incomingVel.normalized;
-                else dir = ((Vector2)(other.transform.position - transform.position)).normalized;
-
-                otherRb.AddForce(dir * objectRecoilForce, ForceMode2D.Impulse);
-
-                if (isBullet && bulletEnableRecoilOnLastHit && bulletRb != null)
+                else
                 {
-                    ApplyBulletRecoil(bulletRb, incomingVel);
-                }
+                    // DEFAULT: give other a Rigidbody2D and fling it, then make bullet fall
+                    Rigidbody2D otherRb = other.GetComponent<Rigidbody2D>();
+                    if (otherRb == null)
+                    {
+                        otherRb = other.gameObject.AddComponent<Rigidbody2D>();
+                        otherRb.gravityScale = objectGravityScaleOnHit;
+                        otherRb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+                        otherRb.freezeRotation = false;
+                    }
 
-                StartCoroutine(MonitorAndDestroyWhenStill(otherRb, other.gameObject));
-                MakeThisBulletFallAndDisappear();
+                    Vector2 dir;
+                    if (incomingVel.sqrMagnitude > 0.0001f) dir = incomingVel.normalized;
+                    else dir = ((Vector2)(other.transform.position - transform.position)).normalized;
+
+                    otherRb.AddForce(dir * objectRecoilForce, ForceMode2D.Impulse);
+
+                    if (isBullet && bulletEnableRecoilOnLastHit && bulletRb != null)
+                        ApplyBulletRecoil(bulletRb, incomingVel);
+
+                    StartCoroutine(MonitorAndDestroyWhenStill(otherRb, other.gameObject));
+                    MakeThisBulletFallAndDisappear();
+
+                    hitCount++;
+                    return;
+                }
             }
+        }
 
-            hitCount++;
+        // NOT last hit:
+        // If the hit object is excluded, do NOT destroy it and do NOT count the hit toward maxHits.
+        if (isExcluded)
+        {
+#if UNITY_EDITOR
+            Debug.Log($"Hit excluded object '{hitObject.name}' (not last hit) — ignoring target and not counting the hit.");
+#endif
+            // Do nothing to the target; do not increment hitCount.
             return;
         }
 
-        // not last hit -> normal destroy
+        // Normal non-excluded behavior: destroy the target and count as a hit.
         SafeDestroy(other.gameObject);
         hitCount++;
 
         if (bulletMaxHits > 0 && hitCount >= bulletMaxHits) MakeThisBulletFallAndDisappear();
+    }
+
+    // Helper to check exclusion list (null-safe). Tries multiple heuristics:
+    // - exact reference match (scene instance)
+    // - child/parent relationships
+    // - root match
+    // - normalized name match (removes "(Clone)" and ignores case)
+    // - tag fallback (if entry has a non-Untagged tag)
+    bool IsInDoNotDestroyList(GameObject go)
+    {
+        if (doNotDestroyList == null || go == null) return false;
+
+        // Never treat the player as excluded
+        var ps = go.GetComponent<PlayerMovmentAndShooting>();
+        if (ps != null && ps.isPlayer) return false;
+
+        string goNorm = NormalizeName(go.name);
+
+        for (int i = 0; i < doNotDestroyList.Count; i++)
+        {
+            var entry = doNotDestroyList[i];
+            if (entry == null) continue;
+
+            // 1) exact reference (scene instance)
+            if (entry == go) return true;
+
+            // 2) child/parent relationship
+            if (go.transform.IsChildOf(entry.transform) || entry.transform.IsChildOf(go.transform)) return true;
+
+            // 3) root match
+            if (entry == go.transform.root.gameObject || entry.transform.root == go.transform.root) return true;
+
+            // 4) normalized name match (handles "(Clone)" and case differences)
+            if (!string.IsNullOrEmpty(entry.name) && NormalizeName(entry.name) == goNorm) return true;
+
+            // 5) tag fallback
+            if (!string.IsNullOrEmpty(entry.tag) && entry.tag != "Untagged" && entry.tag == go.tag) return true;
+        }
+
+        return false;
+    }
+
+    static string NormalizeName(string name)
+    {
+        if (string.IsNullOrEmpty(name)) return string.Empty;
+        return name.Replace("(Clone)", "").Trim();
     }
 
     // Apply immediate recoil to bullet: fling opposite its incoming direction using bulletRecoilForce.
@@ -533,11 +673,29 @@ public class PlayerMovmentAndShooting : MonoBehaviour
 
         if (objectAdditionalDelayAfterStill > 0f) yield return new WaitForSeconds(objectAdditionalDelayAfterStill);
 
+        // Before destroying, ensure target is not in exclusion list
+        if (target != null && IsInDoNotDestroyList(target))
+        {
+#if UNITY_EDITOR
+            Debug.LogWarning($"Monitor aborted destroy: '{target.name}' is in do-not-destroy list.");
+#endif
+            yield break;
+        }
+
         Destroy(target);
     }
 
     void SafeDestroy(GameObject obj)
     {
+        // Double-check exclusion before destroying (defensive)
+        if (obj != null && IsInDoNotDestroyList(obj))
+        {
+#if UNITY_EDITOR
+            Debug.LogWarning($"Prevented destruction of excluded object '{obj.name}'.");
+#endif
+            return;
+        }
+
         Destroy(obj);
     }
 
@@ -618,6 +776,8 @@ internal class PlayerMovmentAndShootingEditor : Editor
     SerializedProperty bulletRecoilForce;
     SerializedProperty bulletRecoilUpwardBias;
 
+    SerializedProperty doNotDestroyListProp;
+
     SerializedProperty iteratorProp;
 
     void OnEnable()
@@ -644,6 +804,8 @@ internal class PlayerMovmentAndShootingEditor : Editor
         bulletEnableRecoilOnLastHit = serializedObject.FindProperty("bulletEnableRecoilOnLastHit");
         bulletRecoilForce = serializedObject.FindProperty("bulletRecoilForce");
         bulletRecoilUpwardBias = serializedObject.FindProperty("bulletRecoilUpwardBias");
+
+        doNotDestroyListProp = serializedObject.FindProperty("doNotDestroyList");
 
         iteratorProp = serializedObject.GetIterator();
     }
@@ -712,6 +874,17 @@ internal class PlayerMovmentAndShootingEditor : Editor
                 EditorGUILayout.PropertyField(bulletRecoilUpwardBias, new GUIContent("Bullet Recoil Upward Bias"));
             }
             EditorGUILayout.Space();
+
+            // Fixed-size "do not destroy" list: exactly 50 slots, no dynamic expansion.
+            EditorGUILayout.LabelField("Bullet - Do Not Destroy List (50 slots)", EditorStyles.boldLabel);
+            if (doNotDestroyListProp.arraySize != 50) doNotDestroyListProp.arraySize = 50;
+            for (int i = 0; i < 50; i++)
+            {
+                var el = doNotDestroyListProp.GetArrayElementAtIndex(i);
+                EditorGUILayout.PropertyField(el, new GUIContent($"Slot {i + 1}"));
+            }
+
+            EditorGUILayout.Space();
         }
 
         // Draw remaining properties (movement, shooting, bullet physics, etc.) but avoid duplicating fields above.
@@ -740,7 +913,8 @@ internal class PlayerMovmentAndShootingEditor : Editor
                 iteratorProp.name == shootController.name ||
                 iteratorProp.name == bulletEnableRecoilOnLastHit.name ||
                 iteratorProp.name == bulletRecoilForce.name ||
-                iteratorProp.name == bulletRecoilUpwardBias.name)
+                iteratorProp.name == bulletRecoilUpwardBias.name ||
+                iteratorProp.name == doNotDestroyListProp.name)
             {
                 continue;
             }
