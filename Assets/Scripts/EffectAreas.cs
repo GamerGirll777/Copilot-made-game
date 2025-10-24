@@ -81,8 +81,12 @@ public class EffectAreas : MonoBehaviour
     {
         if (other == null) return;
 
+        // Find the player component on the collider or its parent.
         var player = other.GetComponent<PlayerMovmentAndShooting>() ?? other.GetComponentInParent<PlayerMovmentAndShooting>();
         if (player == null) return;
+
+        // IMPORTANT: ensure this is an actual player instance (not a bullet instance or other object that also has the script).
+        if (!player.isPlayer) return;
 
         // If we already applied this area to the player, do nothing.
         if (_originals.ContainsKey(player)) return;
@@ -124,6 +128,9 @@ public class EffectAreas : MonoBehaviour
         var player = other.GetComponent<PlayerMovmentAndShooting>() ?? other.GetComponentInParent<PlayerMovmentAndShooting>();
         if (player == null) return;
 
+        // Only consider real player instances.
+        if (!player.isPlayer) return;
+
         // If we did not store originals for this player, nothing to restore.
         if (!_originals.TryGetValue(player, out var orig)) return;
 
@@ -149,19 +156,28 @@ public class EffectAreas : MonoBehaviour
 
     void RestoreAll()
     {
-        foreach (var kvp in _originals)
+        // Restore only entries that still point to real player instances.
+        foreach (var kvp in new List<KeyValuePair<PlayerMovmentAndShooting, OriginalValues>>(_originals))
         {
             var player = kvp.Key;
             var orig = kvp.Value;
-            if (player != null)
+            if (player != null && player.isPlayer)
             {
                 player.shootCooldown = orig.shootCooldown;
                 player.bulletMaxHits = orig.bulletMaxHits;
                 player.bulletLifetime = orig.bulletLifetime;
                 player.bulletFallLifetime = orig.bulletFallLifetime;
             }
+            _originals.Remove(player);
         }
-        _originals.Clear();
+    }
+
+    // Public helper used by PlayerMovmentAndShooting: returns true when the specified player is currently inside this area.
+    public bool IsPlayerInside(PlayerMovmentAndShooting player)
+    {
+        if (player == null) return false;
+        if (!player.isPlayer) return false;
+        return _originals.ContainsKey(player);
     }
 
     // Optional: visually show the area in the Scene view even if the object has no renderer.

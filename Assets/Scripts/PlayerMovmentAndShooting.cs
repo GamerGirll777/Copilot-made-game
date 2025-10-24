@@ -430,10 +430,15 @@ public class PlayerMovmentAndShooting : MonoBehaviour
     {
         if (isPlayer) return;
 
-        if (other.gameObject == owner) return;
-        if (other.gameObject == this.gameObject) return;
+        // Skip collisions with the shooter (owner) or any child colliders of the owner
+        if (owner != null)
+        {
+            if (other.gameObject == owner || other.transform.IsChildOf(owner.transform) || other.transform.root == owner.transform.root)
+                return;
+        }
 
-        PlayerMovmentAndShooting otherScript = other.GetComponent<PlayerMovmentAndShooting>();
+        // Use parent-aware lookup so collisions with child colliders of the player are recognized as the player
+        PlayerMovmentAndShooting otherScript = other.GetComponentInParent<PlayerMovmentAndShooting>();
         // ignore bullets and players entirely
         if (otherScript != null)
         {
@@ -444,10 +449,15 @@ public class PlayerMovmentAndShooting : MonoBehaviour
         // determine the canonical target to check against exclusion list:
         GameObject hitObject = other.gameObject;
         GameObject hitRoot = other.transform.root != null ? other.transform.root.gameObject : hitObject;
+
+        // determine owner player script for area-aware exclusion checks
+        PlayerMovmentAndShooting ownerPlayerScript = null;
+        if (owner != null) ownerPlayerScript = owner.GetComponent<PlayerMovmentAndShooting>();
+
         // check exclusion against collider, its parents, attached rigidbody object and root
-        bool isExcluded = IsInDoNotDestroyList(hitObject)
-                          || IsInDoNotDestroyList(hitRoot)
-                          || (other.attachedRigidbody != null && IsInDoNotDestroyList(other.attachedRigidbody.gameObject));
+        bool isExcluded = IsInDoNotDestroyList(hitObject, ownerPlayerScript)
+                          || IsInDoNotDestroyList(hitRoot, ownerPlayerScript)
+                          || (other.attachedRigidbody != null && IsInDoNotDestroyList(other.attachedRigidbody.gameObject, ownerPlayerScript));
 
 #if UNITY_EDITOR
         Debug.Log($"Bullet '{name}' hit '{hitObject.name}' (root '{hitRoot.name}'). excluded={isExcluded}. hitCount={hitCount}. willBeLast={(bulletMaxHits > 0 && (hitCount + 1 >= bulletMaxHits))}");
@@ -570,13 +580,14 @@ public class PlayerMovmentAndShooting : MonoBehaviour
         if (bulletMaxHits > 0 && hitCount >= bulletMaxHits) MakeThisBulletFallAndDisappear();
     }
 
-    // Helper to check exclusion list (null-safe). Tries multiple heuristics:
+    // Helper to check exclusion list (null-safe). Tries multiple heuristics and supports EffectAreas-aware exclusion:
     // - exact reference match (scene instance)
     // - child/parent relationships
     // - root match
-    // - normalized name match (removes "(Clone)" and ignores case)
+    // - normalized name match (removes "(Clone)")
     // - tag fallback (if entry has a non-Untagged tag)
-    bool IsInDoNotDestroyList(GameObject go)
+    // - if an entry is an EffectAreas GameObject, it counts as an exclusion ONLY WHEN ownerPlayer != null AND the owner player is currently inside that EffectAreas instance.
+    bool IsInDoNotDestroyList(GameObject go, PlayerMovmentAndShooting ownerPlayer = null)
     {
         if (doNotDestroyList == null || go == null) return false;
 
@@ -590,6 +601,27 @@ public class PlayerMovmentAndShooting : MonoBehaviour
         {
             var entry = doNotDestroyList[i];
             if (entry == null) continue;
+
+            // If entry is an EffectAreas instance, treat specially:
+            var area = entry.GetComponent<EffectAreas>();
+            if (area != null)
+            {
+                // Check if the hit object is the area or a child/root of the area.
+                bool hitsArea = (entry == go)
+                                || go.transform.IsChildOf(entry.transform)
+                                || (entry == go.transform.root.gameObject)
+                                || (entry.transform.root == go.transform.root);
+
+                if (hitsArea)
+                {
+                    // Only treat as excluded if the owner who shot the bullet is currently inside that EffectArea.
+                    if (ownerPlayer != null && area.IsPlayerInside(ownerPlayer))
+                        return true;
+
+                    // Owner is not inside area or owner unknown -> do NOT treat as excluded by this entry.
+                    continue;
+                }
+            }
 
             // 1) exact reference (scene instance)
             if (entry == go) return true;
