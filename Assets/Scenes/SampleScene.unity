@@ -467,7 +467,7 @@ MonoBehaviour:
   jumpController: 3
   shootKey: 32
   shootAllowController: 1
-  shootController: 2
+  shootController: 8
   moveSpeed: 6
   jumpForce: 12
   fallMultiplier: 2.5
@@ -1388,8 +1388,8 @@ Transform:
   m_GameObject: {fileID: 333791223}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 28.96, y: -0.9946, z: 0}
-  m_LocalScale: {x: 28.7789, y: 0.8507, z: 1}
+  m_LocalPosition: {x: 28.96, y: -0.7489, z: 0}
+  m_LocalScale: {x: 28.7789, y: 1.3421495, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -3852,11 +3852,11 @@ MonoBehaviour:
   isReloadArea: 1
   isMaxHitsArea: 0
   isLifetimeArea: 0
-  reloadTimeChange: 0.25
+  reloadTimeChange: 0.1
   maxHitsChange: 4
   bulletLifeFlying: 5
   bulletLifeBouncing: 2
-  gizmoColor: {r: 0.07679862, g: 0.054200795, b: 0.3962264, a: 0.81960785}
+  gizmoColor: {r: 0, g: 0, b: 1, a: 0.6862745}
 --- !u!61 &1184319567
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -3948,7 +3948,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_Sprite: {fileID: 7482667652216324306, guid: 311925a002f4447b3a28927169b83ea6, type: 3}
-  m_Color: {r: 1, g: 0, b: 0, a: 0.25490198}
+  m_Color: {r: 0, g: 0.02520442, b: 1, a: 0.25490198}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
@@ -5854,7 +5854,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_Sprite: {fileID: 7482667652216324306, guid: 311925a002f4447b3a28927169b83ea6, type: 3}
-  m_Color: {r: 1, g: 0, b: 0, a: 0.25490198}
+  m_Color: {r: 0.07035923, g: 1, b: 0, a: 0.25490198}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
@@ -6143,7 +6143,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_Sprite: {fileID: 7482667652216324306, guid: 311925a002f4447b3a28927169b83ea6, type: 3}
-  m_Color: {r: 1, g: 0, b: 0, a: 0.25490198}
+  m_Color: {r: 0, g: 1, b: 0.04085064, a: 0.25490198}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
@@ -6319,27 +6319,27 @@ PrefabInstance:
     - target: {fileID: 6535482612410306396, guid: b9e0834b399a3584dbaa6f17a6db175a, type: 3}
       propertyPath: 'doNotDestroyList.Array.data[5]'
       value: 
-      objectReference: {fileID: 0}
+      objectReference: {fileID: 129361304}
     - target: {fileID: 6535482612410306396, guid: b9e0834b399a3584dbaa6f17a6db175a, type: 3}
       propertyPath: 'doNotDestroyList.Array.data[6]'
       value: 
-      objectReference: {fileID: 0}
+      objectReference: {fileID: 333791223}
     - target: {fileID: 6535482612410306396, guid: b9e0834b399a3584dbaa6f17a6db175a, type: 3}
       propertyPath: 'doNotDestroyList.Array.data[7]'
       value: 
-      objectReference: {fileID: 0}
+      objectReference: {fileID: 777459472}
     - target: {fileID: 6535482612410306396, guid: b9e0834b399a3584dbaa6f17a6db175a, type: 3}
       propertyPath: 'doNotDestroyList.Array.data[8]'
       value: 
-      objectReference: {fileID: 0}
+      objectReference: {fileID: 311354991}
     - target: {fileID: 6535482612410306396, guid: b9e0834b399a3584dbaa6f17a6db175a, type: 3}
       propertyPath: 'doNotDestroyList.Array.data[9]'
       value: 
-      objectReference: {fileID: 0}
+      objectReference: {fileID: 2041212539}
     - target: {fileID: 6535482612410306396, guid: b9e0834b399a3584dbaa6f17a6db175a, type: 3}
       propertyPath: 'doNotDestroyList.Array.data[10]'
       value: 
-      objectReference: {fileID: 0}
+      objectReference: {fileID: 1130351135}
     - target: {fileID: 6535482612410306396, guid: b9e0834b399a3584dbaa6f17a6db175a, type: 3}
       propertyPath: 'doNotDestroyList.Array.data[11]'
       value: 
